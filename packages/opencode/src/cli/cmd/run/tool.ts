@@ -356,10 +356,45 @@ function runEdit(p: ToolProps<typeof EditTool>): ToolInline {
 }
 
 function runWebSearch(p: ToolProps<typeof WebSearchTool>): ToolInline {
-  const title = webSearchProviderLabel(p.metadata.provider)
+  const provider = p.metadata.provider || (p.frame.name === "googleSearch" || p.frame.name === "google_search" ? "google" : undefined)
+  const title = webSearchProviderLabel(provider)
+  const inputDict = p.input as Record<string, unknown>
+  const query = text(inputDict.query) || text(inputDict.query_string) || text(inputDict.prompt) || (() => {
+    const values = Object.values(inputDict).filter((val): val is string => typeof val === "string")
+    return values[0] || ""
+  })()
+
+  let numResults = num((p.metadata as Record<string, unknown>).numResults)
+  if (numResults === undefined) {
+    const output = text(p.frame.state.output).trim()
+    if (output) {
+      try {
+        const parsed = JSON.parse(output)
+        if (Array.isArray(parsed)) {
+          numResults = parsed.length
+        } else if (parsed && typeof parsed === "object") {
+          const items = parsed.results || parsed.items || parsed.webPages?.value || parsed.webPages || parsed.searchResults
+          if (Array.isArray(items)) {
+            numResults = items.length
+          } else if (typeof parsed.count === "number") {
+            numResults = parsed.count
+          } else if (typeof parsed.totalResults === "number") {
+            numResults = parsed.totalResults
+          }
+        }
+      } catch {
+        const urls = output.match(/https?:\/\/[^\s]+/g)
+        if (urls && urls.length > 0) {
+          numResults = new Set(urls).size
+        }
+      }
+    }
+  }
+
+  const resultSuffix = numResults !== undefined ? ` (${numResults} results)` : ""
   return {
     icon: "◈",
-    title: p.input.query ? `${title} "${p.input.query}"` : title,
+    title: query ? `${title} "${query}"${resultSuffix}` : `${title}${resultSuffix}`,
   }
 }
 
@@ -908,8 +943,13 @@ function scrollWebfetchStart(p: ToolProps<typeof WebFetchTool>): string {
 }
 
 function scrollWebSearchStart(p: ToolProps<typeof WebSearchTool>): string {
-  const title = webSearchProviderLabel(p.metadata.provider)
-  const query = p.input.query ?? ""
+  const provider = p.metadata.provider || (p.frame.name === "googleSearch" || p.frame.name === "google_search" ? "google" : undefined)
+  const title = webSearchProviderLabel(provider)
+  const inputDict = p.input as Record<string, unknown>
+  const query = text(inputDict.query) || text(inputDict.query_string) || text(inputDict.prompt) || (() => {
+    const values = Object.values(inputDict).filter((val): val is string => typeof val === "string")
+    return values[0] || ""
+  })()
   if (!query) {
     return `◈ ${title}`
   }

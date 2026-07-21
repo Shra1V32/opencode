@@ -2203,6 +2203,7 @@ function WebFetch(props: ToolProps) {
 
 function WebSearch(props: ToolProps) {
   const query = createMemo(() => {
+    if (typeof props.input === "string") return props.input
     const raw = stringValue(props.input.query) || stringValue(props.input.query_string) || stringValue(props.input.prompt)
     if (raw) return raw
     const values = Object.values(props.input).filter((val): val is string => typeof val === "string")
@@ -2221,10 +2222,44 @@ function WebSearch(props: ToolProps) {
     }
     return "Searching web..."
   })
+  const numResults = createMemo(() => {
+    if (typeof props.metadata.numResults === "number") return props.metadata.numResults
+    if (typeof props.metadata.numResults === "string") {
+      const parsed = parseInt(props.metadata.numResults, 10)
+      if (!isNaN(parsed)) return parsed
+    }
+    const output = props.output?.trim()
+    if (output) {
+      try {
+        const parsed = JSON.parse(output)
+        if (Array.isArray(parsed)) {
+          return parsed.length
+        }
+        if (parsed && typeof parsed === "object") {
+          const list = parsed.results || parsed.items || parsed.webPages?.value || parsed.webPages || parsed.searchResults
+          if (Array.isArray(list)) {
+            return list.length
+          }
+          if (typeof parsed.count === "number") {
+            return parsed.count
+          }
+          if (typeof parsed.totalResults === "number") {
+            return parsed.totalResults
+          }
+        }
+      } catch {
+        const urls = output.match(/https?:\/\/[^\s]+/g)
+        if (urls && urls.length > 0) {
+          return new Set(urls).size
+        }
+      }
+    }
+    return undefined
+  })
   return (
     <InlineTool icon="◈" pending={pending()} complete={query()} part={props.part}>
       {webSearchProviderLabel(provider())} "{query()}"{" "}
-      <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
+      <Show when={numResults() !== undefined}>({numResults()} results)</Show>
     </InlineTool>
   )
 }
