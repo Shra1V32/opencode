@@ -65,34 +65,30 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 
 You can install this fork directly from [GitHub Releases](https://github.com/Shra1V32/opencode/releases):
 
-##### macOS & Linux
+##### Direct Binary Install (macOS & Linux)
 
 ```bash
-# Download and extract the latest release for your platform
+# Download direct executable binary for your platform and place in /usr/local/bin
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m | sed 's/x86_64/x64/')"
 
-if [ "$OS" = "linux" ]; then
-  curl -fsSL "https://github.com/Shra1V32/opencode/releases/latest/download/opencode-${OS}-${ARCH}.tar.gz" | tar -xz -C /tmp
-  sudo mv /tmp/opencode /usr/local/bin/
-else
-  curl -fsSL -o /tmp/opencode.zip "https://github.com/Shra1V32/opencode/releases/latest/download/opencode-${OS}-${ARCH}.zip"
-  unzip -o /tmp/opencode.zip -d /tmp/
-  sudo mv /tmp/opencode /usr/local/bin/
-fi
+curl -fsSL "https://github.com/Shra1V32/opencode/releases/latest/download/opencode-${OS}-${ARCH}" -o /tmp/opencode
+chmod +x /tmp/opencode
+sudo mv /tmp/opencode /usr/local/bin/
 ```
 
-##### Release Assets
+##### Direct Binary Release Assets
 
-Direct binary downloads available on the [Releases Page](https://github.com/Shra1V32/opencode/releases):
+Direct standalone executable binaries are available on the [Releases Page](https://github.com/Shra1V32/opencode/releases):
 
-| Operating System | Architecture | Asset |
+| Operating System | Architecture | Direct Binary Asset |
 |---|---|---|
-| Linux | x86_64 | `opencode-linux-x64.tar.gz` |
-| Linux | ARM64 | `opencode-linux-arm64.tar.gz` |
-| macOS | Apple Silicon (M1/M2/M3/M4) | `opencode-darwin-arm64.zip` |
-| macOS | Intel | `opencode-darwin-x64.zip` |
-| Windows | x86_64 / ARM64 | `opencode-windows-x64.zip` / `opencode-windows-arm64.zip` |
+| Linux | x86_64 | `opencode-linux-x64` |
+| Linux | ARM64 | `opencode-linux-arm64` |
+| Linux (musl) | x86_64 / ARM64 | `opencode-linux-x64-musl` / `opencode-linux-arm64-musl` |
+| macOS | Apple Silicon (M1/M2/M3/M4) | `opencode-darwin-arm64` |
+| macOS | Intel | `opencode-darwin-x64` |
+| Windows | x86_64 / ARM64 | `opencode-windows-x64.exe` / `opencode-windows-arm64.exe` |
 
 ##### Building from Source (Bun)
 
