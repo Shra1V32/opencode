@@ -1,6 +1,7 @@
 export function webSearchProviderLabel(provider: unknown) {
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
+  if (provider === "google" || provider === "googleSearch" || provider === "google_search") return "Google Web Search"
   return "Web Search"
 }
 

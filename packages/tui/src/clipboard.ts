@@ -23,7 +23,16 @@ function command(command: string, args: string[] = [], input?: string) {
 function writeOsc52(text: string) {
   if (!process.stdout.isTTY) return
   const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
-  process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
+  if (process.env.TMUX) {
+    process.stdout.write(sequence)
+    process.stdout.write(`\x1bPtmux;\x1b${sequence}\x1b\\`)
+    return
+  }
+  if (process.env.STY) {
+    process.stdout.write(`\x1bPtmux;\x1b${sequence}\x1b\\`)
+    return
+  }
+  process.stdout.write(sequence)
 }
 
 export async function read() {
@@ -119,6 +128,9 @@ function getCopyMethod() {
 
 export async function write(text: string) {
   writeOsc52(text)
+  if (process.env.TMUX) {
+    await command("tmux", ["load-buffer", "-w", "-"], text).catch(() => undefined)
+  }
   const method = await getCopyMethod()
   await method(text)
 }

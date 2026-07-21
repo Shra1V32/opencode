@@ -2202,9 +2202,28 @@ function WebFetch(props: ToolProps) {
 }
 
 function WebSearch(props: ToolProps) {
+  const query = createMemo(() => {
+    const raw = stringValue(props.input.query) || stringValue(props.input.query_string) || stringValue(props.input.prompt)
+    if (raw) return raw
+    const values = Object.values(props.input).filter((val): val is string => typeof val === "string")
+    return values[0] || ""
+  })
+  const provider = createMemo(() => {
+    if (props.metadata.provider) return props.metadata.provider
+    if (props.tool === "googleSearch" || props.tool === "google_search" || props.tool === "server:GOOGLE_SEARCH_WEB") {
+      return "google"
+    }
+    return undefined
+  })
+  const pending = createMemo(() => {
+    if (provider() === "google") {
+      return "Searching via Google..."
+    }
+    return "Searching web..."
+  })
   return (
-    <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
-      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
+    <InlineTool icon="◈" pending={pending()} complete={query()} part={props.part}>
+      {webSearchProviderLabel(provider())} "{query()}"{" "}
       <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
     </InlineTool>
   )
@@ -2645,6 +2664,9 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
+  if (tool === "googleSearch" || tool === "google_search" || tool === "server:GOOGLE_SEARCH_WEB") {
+    return "websearch"
+  }
   return toolDisplays.has(tool) ? tool : "generic"
 }
 

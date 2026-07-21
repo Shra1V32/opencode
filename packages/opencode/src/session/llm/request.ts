@@ -146,6 +146,24 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
+
+  if (tools["googleSearch"]) {
+    delete tools["googleSearch"]
+    if (input.model.providerID === "google") {
+      const mod = yield* Effect.promise(() => import("@ai-sdk/google"))
+      const providerInstance = mod.google || (mod.createGoogleGenerativeAI && mod.createGoogleGenerativeAI({}))
+      if (providerInstance && providerInstance.tools && providerInstance.tools.googleSearch) {
+        tools["google_search"] = providerInstance.tools.googleSearch({}) as any
+      }
+    } else if (input.model.providerID === "google-vertex") {
+      const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
+      const providerInstance = mod.vertex || (mod.createVertex && mod.createVertex({}))
+      if (providerInstance && providerInstance.tools && providerInstance.tools.googleSearch) {
+        tools["google_search"] = providerInstance.tools.googleSearch({}) as any
+      }
+    }
+  }
+
   // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
   // on every function tool so MCP-sourced and dynamic schemas that don't
   // satisfy OpenAI's structured-outputs constraints still register.
