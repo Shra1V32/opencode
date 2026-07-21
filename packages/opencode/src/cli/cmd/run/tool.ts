@@ -355,41 +355,150 @@ function runEdit(p: ToolProps<typeof EditTool>): ToolInline {
   }
 }
 
-function runWebSearch(p: ToolProps<typeof WebSearchTool>): ToolInline {
-  const provider = p.metadata.provider || (p.frame.name === "googleSearch" || p.frame.name === "google_search" ? "google" : undefined)
-  const title = webSearchProviderLabel(provider)
-  const inputDict = p.input as Record<string, unknown>
-  const query = text(inputDict.query) || text(inputDict.query_string) || text(inputDict.prompt) || (() => {
-    const values = Object.values(inputDict).filter((val): val is string => typeof val === "string")
-    return values[0] || ""
-  })()
+function extractWebSearchQuery(input: unknown, metadata?: unknown, extra?: unknown): string {
+  if (typeof input === "string" && input.trim()) return input.trim()
 
-  let numResults = num((p.metadata as Record<string, unknown>).numResults)
-  if (numResults === undefined) {
-    const output = text(p.frame.state.output).trim()
-    if (output) {
-      try {
-        const parsed = JSON.parse(output)
-        if (Array.isArray(parsed)) {
-          numResults = parsed.length
-        } else if (parsed && typeof parsed === "object") {
-          const items = parsed.results || parsed.items || parsed.webPages?.value || parsed.webPages || parsed.searchResults
-          if (Array.isArray(items)) {
-            numResults = items.length
-          } else if (typeof parsed.count === "number") {
-            numResults = parsed.count
-          } else if (typeof parsed.totalResults === "number") {
-            numResults = parsed.totalResults
-          }
-        }
-      } catch {
-        const urls = output.match(/https?:\/\/[^\s]+/g)
-        if (urls && urls.length > 0) {
-          numResults = new Set(urls).size
-        }
+  function stringFrom(val: unknown): string | undefined {
+    if (typeof val === "string" && val.trim()) return val.trim()
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        const res = stringFrom(item)
+        if (res) return res
+      }
+    }
+    if (typeof val === "object" && val !== null) {
+      const obj = val as Record<string, unknown>
+      const direct =
+        stringFrom(obj.query) ||
+        stringFrom(obj.q) ||
+        stringFrom(obj.query_string) ||
+        stringFrom(obj.prompt) ||
+        stringFrom(obj.text)
+      if (direct) return direct
+    }
+    return undefined
+  }
+
+  if (typeof input === "object" && input !== null) {
+    const dict = input as Record<string, unknown>
+    const primary =
+      stringFrom(dict.query) ||
+      stringFrom(dict.q) ||
+      stringFrom(dict.query_string) ||
+      stringFrom(dict.queryString) ||
+      stringFrom(dict.search_query) ||
+      stringFrom(dict.searchQuery) ||
+      stringFrom(dict.prompt) ||
+      stringFrom(dict.text) ||
+      stringFrom(dict.input) ||
+      stringFrom(dict.pattern) ||
+      stringFrom(dict.queries) ||
+      stringFrom(dict.search_queries) ||
+      stringFrom(dict.searchQueries) ||
+      stringFrom(dict.patterns) ||
+      stringFrom(dict.args) ||
+      stringFrom(dict.parameters) ||
+      stringFrom(dict.request)
+    if (primary) return primary
+
+    for (const val of Object.values(dict)) {
+      const res = stringFrom(val)
+      if (res) return res
+    }
+  }
+
+  if (typeof metadata === "object" && metadata !== null) {
+    const meta = metadata as Record<string, unknown>
+    const metaQuery =
+      stringFrom(meta.query) ||
+      stringFrom(meta.q) ||
+      stringFrom(meta.search_query) ||
+      stringFrom(meta.searchQuery) ||
+      stringFrom(meta.patterns)
+    if (metaQuery) return metaQuery
+  }
+
+  if (extra && typeof extra === "object") {
+    const obj = extra as Record<string, unknown>
+    const titleCandidates = [
+      obj.title,
+      (obj.state as Record<string, unknown> | undefined)?.title,
+      (obj.part as Record<string, unknown> | undefined)?.title,
+    ]
+    for (const t of titleCandidates) {
+      if (typeof t === "string" && t) {
+        const match = t.match(/"([^"]+)"/) || t.match(/: (.*)$/)
+        if (match && match[1]?.trim()) return match[1].trim()
       }
     }
   }
+
+  return ""
+}
+
+function extractWebSearchResultsCount(metadata?: unknown, outputRaw?: unknown): number | undefined {
+  if (typeof metadata === "object" && metadata !== null) {
+    const meta = metadata as Record<string, unknown>
+    for (const k of [meta.numResults, meta.count, meta.totalResults, meta.resultsCount, meta.matches]) {
+      if (typeof k === "number") return k
+      if (typeof k === "string") {
+        const p = parseInt(k, 10)
+        if (!isNaN(p)) return p
+      }
+    }
+  }
+
+  if (typeof outputRaw === "string" && outputRaw.trim()) {
+    const output = outputRaw.trim()
+    try {
+      const parsed = JSON.parse(output)
+      if (Array.isArray(parsed)) return parsed.length
+      if (parsed && typeof parsed === "object") {
+        const list =
+          parsed.results ||
+          parsed.items ||
+          parsed.webPages?.value ||
+          parsed.webPages ||
+          parsed.searchResults ||
+          parsed.search_results ||
+          parsed.organic_results ||
+          parsed.groundingChunks ||
+          parsed.groundingMetadata ||
+          parsed.candidates ||
+          parsed.sources ||
+          parsed.queries
+        if (Array.isArray(list)) return list.length
+        for (const numKey of [parsed.count, parsed.totalResults, parsed.resultsCount, parsed.numResults, parsed.matches]) {
+          if (typeof numKey === "number") return numKey
+          if (typeof numKey === "string") {
+            const p = parseInt(numKey, 10)
+            if (!isNaN(p)) return p
+          }
+        }
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+
+    const rawUrls = output.match(/https?:\/\/[^\s)\]}">,']+/g)
+    if (rawUrls && rawUrls.length > 0) {
+      const cleanUrls = new Set(rawUrls.map((u) => u.replace(/[.,;)\]"'>]+$/, "")))
+      if (cleanUrls.size > 0) return cleanUrls.size
+    }
+  }
+
+  return undefined
+}
+
+function runWebSearch(p: ToolProps<typeof WebSearchTool>): ToolInline {
+  const provider =
+    p.metadata.provider ||
+    (p.frame.name === "googleSearch" || p.frame.name === "google_search" || p.frame.name === "server:GOOGLE_SEARCH_WEB"
+      ? "google"
+      : undefined)
+  const title = webSearchProviderLabel(provider)
+  const query = extractWebSearchQuery(p.input, p.metadata, p.frame)
+  const numResults = extractWebSearchResultsCount(p.metadata, p.frame.state.output)
 
   const resultSuffix = numResults !== undefined ? ` (${numResults} results)` : ""
   return {
@@ -943,13 +1052,13 @@ function scrollWebfetchStart(p: ToolProps<typeof WebFetchTool>): string {
 }
 
 function scrollWebSearchStart(p: ToolProps<typeof WebSearchTool>): string {
-  const provider = p.metadata.provider || (p.frame.name === "googleSearch" || p.frame.name === "google_search" ? "google" : undefined)
+  const provider =
+    p.metadata.provider ||
+    (p.frame.name === "googleSearch" || p.frame.name === "google_search" || p.frame.name === "server:GOOGLE_SEARCH_WEB"
+      ? "google"
+      : undefined)
   const title = webSearchProviderLabel(provider)
-  const inputDict = p.input as Record<string, unknown>
-  const query = text(inputDict.query) || text(inputDict.query_string) || text(inputDict.prompt) || (() => {
-    const values = Object.values(inputDict).filter((val): val is string => typeof val === "string")
-    return values[0] || ""
-  })()
+  const query = extractWebSearchQuery(p.input, p.metadata, p.frame)
   if (!query) {
     return `◈ ${title}`
   }

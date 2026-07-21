@@ -16,7 +16,10 @@ export const GoogleSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          yield* ctx.metadata({ title: `Google Web Search "${params.query}"`, metadata: { provider: "google" } })
+          yield* ctx.metadata({
+            title: `Google Web Search "${params.query}"`,
+            metadata: { provider: "google", query: params.query, numResults: params.numResults },
+          })
 
           yield* ctx.ask({
             permission: "websearch",
@@ -32,7 +35,7 @@ export const GoogleSearchTool = Tool.define(
           return {
             output: "Google Search is handled natively by the provider.",
             title: `Google Web Search: ${params.query}`,
-            metadata: { provider: "google" },
+            metadata: { provider: "google", query: params.query, numResults: params.numResults },
           }
         }).pipe(Effect.orDie),
     }

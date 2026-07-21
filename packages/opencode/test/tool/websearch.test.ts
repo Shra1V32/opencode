@@ -47,6 +47,9 @@ describe("websearch provider", () => {
   test("uses branded labels", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
     expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
+    expect(webSearchProviderLabel("google")).toBe("Google Web Search")
+    expect(webSearchProviderLabel("googleSearch")).toBe("Google Web Search")
+    expect(webSearchProviderLabel("google_search")).toBe("Google Web Search")
     expect(webSearchProviderLabel(undefined)).toBe("Web Search")
   })
 

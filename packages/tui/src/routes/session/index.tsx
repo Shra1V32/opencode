@@ -2201,14 +2201,145 @@ function WebFetch(props: ToolProps) {
   )
 }
 
+function extractWebSearchQuery(input: unknown, metadata?: unknown, extra?: unknown): string {
+  if (typeof input === "string" && input.trim()) return input.trim()
+
+  function stringFrom(val: unknown): string | undefined {
+    if (typeof val === "string" && val.trim()) return val.trim()
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        const res = stringFrom(item)
+        if (res) return res
+      }
+    }
+    if (typeof val === "object" && val !== null) {
+      const obj = val as Record<string, unknown>
+      const direct =
+        stringFrom(obj.query) ||
+        stringFrom(obj.q) ||
+        stringFrom(obj.query_string) ||
+        stringFrom(obj.prompt) ||
+        stringFrom(obj.text)
+      if (direct) return direct
+    }
+    return undefined
+  }
+
+  if (typeof input === "object" && input !== null) {
+    const dict = input as Record<string, unknown>
+    const primary =
+      stringFrom(dict.query) ||
+      stringFrom(dict.q) ||
+      stringFrom(dict.query_string) ||
+      stringFrom(dict.queryString) ||
+      stringFrom(dict.search_query) ||
+      stringFrom(dict.searchQuery) ||
+      stringFrom(dict.prompt) ||
+      stringFrom(dict.text) ||
+      stringFrom(dict.input) ||
+      stringFrom(dict.pattern) ||
+      stringFrom(dict.queries) ||
+      stringFrom(dict.search_queries) ||
+      stringFrom(dict.searchQueries) ||
+      stringFrom(dict.patterns) ||
+      stringFrom(dict.args) ||
+      stringFrom(dict.parameters) ||
+      stringFrom(dict.request)
+    if (primary) return primary
+
+    for (const val of Object.values(dict)) {
+      const res = stringFrom(val)
+      if (res) return res
+    }
+  }
+
+  if (typeof metadata === "object" && metadata !== null) {
+    const meta = metadata as Record<string, unknown>
+    const metaQuery =
+      stringFrom(meta.query) ||
+      stringFrom(meta.q) ||
+      stringFrom(meta.search_query) ||
+      stringFrom(meta.searchQuery) ||
+      stringFrom(meta.patterns)
+    if (metaQuery) return metaQuery
+  }
+
+  if (extra && typeof extra === "object") {
+    const obj = extra as Record<string, unknown>
+    const part = "part" in obj && obj.part && typeof obj.part === "object" ? (obj.part as Record<string, unknown>) : undefined
+    const state = part && "state" in part && part.state && typeof part.state === "object" ? (part.state as Record<string, unknown>) : undefined
+    const titleCandidates = [
+      "title" in obj ? obj.title : undefined,
+      part && "title" in part ? part.title : undefined,
+      state && "title" in state ? state.title : undefined,
+    ]
+    for (const t of titleCandidates) {
+      if (typeof t === "string" && t) {
+        const match = t.match(/"([^"]+)"/) || t.match(/: (.*)$/)
+        if (match && match[1]?.trim()) return match[1].trim()
+      }
+    }
+  }
+
+  return ""
+}
+
+function extractWebSearchResultsCount(metadata?: unknown, outputRaw?: unknown): number | undefined {
+  if (typeof metadata === "object" && metadata !== null) {
+    const meta = metadata as Record<string, unknown>
+    for (const k of [meta.numResults, meta.count, meta.totalResults, meta.resultsCount, meta.matches]) {
+      if (typeof k === "number") return k
+      if (typeof k === "string") {
+        const p = parseInt(k, 10)
+        if (!isNaN(p)) return p
+      }
+    }
+  }
+
+  if (typeof outputRaw === "string" && outputRaw.trim()) {
+    const output = outputRaw.trim()
+    try {
+      const parsed = JSON.parse(output)
+      if (Array.isArray(parsed)) return parsed.length
+      if (parsed && typeof parsed === "object") {
+        const list =
+          parsed.results ||
+          parsed.items ||
+          parsed.webPages?.value ||
+          parsed.webPages ||
+          parsed.searchResults ||
+          parsed.search_results ||
+          parsed.organic_results ||
+          parsed.groundingChunks ||
+          parsed.groundingMetadata ||
+          parsed.candidates ||
+          parsed.sources ||
+          parsed.queries
+        if (Array.isArray(list)) return list.length
+        for (const numKey of [parsed.count, parsed.totalResults, parsed.resultsCount, parsed.numResults, parsed.matches]) {
+          if (typeof numKey === "number") return numKey
+          if (typeof numKey === "string") {
+            const p = parseInt(numKey, 10)
+            if (!isNaN(p)) return p
+          }
+        }
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+
+    const rawUrls = output.match(/https?:\/\/[^\s)\]}">,']+/g)
+    if (rawUrls && rawUrls.length > 0) {
+      const cleanUrls = new Set(rawUrls.map((u) => u.replace(/[.,;)\]"'>]+$/, "")))
+      if (cleanUrls.size > 0) return cleanUrls.size
+    }
+  }
+
+  return undefined
+}
+
 function WebSearch(props: ToolProps) {
-  const query = createMemo(() => {
-    if (typeof props.input === "string") return props.input
-    const raw = stringValue(props.input.query) || stringValue(props.input.query_string) || stringValue(props.input.prompt)
-    if (raw) return raw
-    const values = Object.values(props.input).filter((val): val is string => typeof val === "string")
-    return values[0] || ""
-  })
+  const query = createMemo(() => extractWebSearchQuery(props.input, props.metadata, props))
   const provider = createMemo(() => {
     if (props.metadata.provider) return props.metadata.provider
     if (props.tool === "googleSearch" || props.tool === "google_search" || props.tool === "server:GOOGLE_SEARCH_WEB") {
@@ -2217,48 +2348,18 @@ function WebSearch(props: ToolProps) {
     return undefined
   })
   const pending = createMemo(() => {
+    const q = query()
     if (provider() === "google") {
-      return "Searching via Google..."
+      return q ? `Searching via Google for "${q}"...` : "Searching via Google..."
     }
-    return "Searching web..."
+    return q ? `Searching web for "${q}"...` : "Searching web..."
   })
-  const numResults = createMemo(() => {
-    if (typeof props.metadata.numResults === "number") return props.metadata.numResults
-    if (typeof props.metadata.numResults === "string") {
-      const parsed = parseInt(props.metadata.numResults, 10)
-      if (!isNaN(parsed)) return parsed
-    }
-    const output = props.output?.trim()
-    if (output) {
-      try {
-        const parsed = JSON.parse(output)
-        if (Array.isArray(parsed)) {
-          return parsed.length
-        }
-        if (parsed && typeof parsed === "object") {
-          const list = parsed.results || parsed.items || parsed.webPages?.value || parsed.webPages || parsed.searchResults
-          if (Array.isArray(list)) {
-            return list.length
-          }
-          if (typeof parsed.count === "number") {
-            return parsed.count
-          }
-          if (typeof parsed.totalResults === "number") {
-            return parsed.totalResults
-          }
-        }
-      } catch {
-        const urls = output.match(/https?:\/\/[^\s]+/g)
-        if (urls && urls.length > 0) {
-          return new Set(urls).size
-        }
-      }
-    }
-    return undefined
-  })
+  const numResults = createMemo(() => extractWebSearchResultsCount(props.metadata, props.output))
+  const isCompleted = createMemo(() => props.part.state.status === "completed")
+
   return (
-    <InlineTool icon="◈" pending={pending()} complete={query()} part={props.part}>
-      {webSearchProviderLabel(provider())} "{query()}"{" "}
+    <InlineTool icon="◈" pending={pending()} complete={query() || isCompleted()} part={props.part}>
+      {webSearchProviderLabel(provider())} {query() ? `"${query()}"` : ""}{" "}
       <Show when={numResults() !== undefined}>({numResults()} results)</Show>
     </InlineTool>
   )
