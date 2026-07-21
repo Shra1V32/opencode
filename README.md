@@ -83,12 +83,12 @@ Direct standalone executable binaries are available on the [Releases Page](https
 
 | Operating System | Architecture | Direct Binary Asset |
 |---|---|---|
-| Linux | x86_64 | `opencode-linux-x64` |
+| Linux | x86_64 / amd64 | `opencode-linux-amd64` / `opencode-linux-x64` |
 | Linux | ARM64 | `opencode-linux-arm64` |
-| Linux (musl) | x86_64 / ARM64 | `opencode-linux-x64-musl` / `opencode-linux-arm64-musl` |
+| Linux (musl) | x86_64 / ARM64 | `opencode-linux-amd64-musl` / `opencode-linux-arm64-musl` |
 | macOS | Apple Silicon (M1/M2/M3/M4) | `opencode-darwin-arm64` |
-| macOS | Intel | `opencode-darwin-x64` |
-| Windows | x86_64 / ARM64 | `opencode-windows-x64.exe` / `opencode-windows-arm64.exe` |
+| macOS | Intel | `opencode-darwin-amd64` / `opencode-darwin-x64` |
+| Windows | x86_64 / ARM64 | `opencode-windows-amd64.exe` / `opencode-windows-arm64.exe` |
 
 ##### Building from Source (Bun)
 
