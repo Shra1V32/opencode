@@ -495,6 +495,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    google: () =>
+      Effect.succeed({
+        autoload: false,
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }),
     "google-vertex": Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
       // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex; keep the wider
