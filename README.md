@@ -68,27 +68,35 @@ You can install this fork directly from [GitHub Releases](https://github.com/Shr
 ##### Direct Binary Install (macOS & Linux)
 
 ```bash
-# Download direct executable binary for your platform and place in /usr/local/bin
+# Download binary archive for your platform and place in /usr/local/bin
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m | sed 's/x86_64/x64/')"
+ARCH="$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')"
+EXT="$([ "$OS" = "darwin" ] && echo "zip" || echo "tar.gz")"
 
-curl -fsSL "https://github.com/Shra1V32/opencode/releases/latest/download/opencode-${OS}-${ARCH}" -o /tmp/opencode
-chmod +x /tmp/opencode
-sudo mv /tmp/opencode /usr/local/bin/
+TMP_DIR="$(mktemp -d)"
+curl -fsSL "https://github.com/Shra1V32/opencode/releases/latest/download/opencode-${OS}-${ARCH}.${EXT}" -o "${TMP_DIR}/opencode.${EXT}"
+if [ "$EXT" = "zip" ]; then
+  unzip -q "${TMP_DIR}/opencode.zip" -d "${TMP_DIR}"
+else
+  tar -xzf "${TMP_DIR}/opencode.tar.gz" -C "${TMP_DIR}"
+fi
+chmod +x "${TMP_DIR}/opencode"
+sudo mv "${TMP_DIR}/opencode" /usr/local/bin/
+rm -rf "${TMP_DIR}"
 ```
 
-##### Direct Binary Release Assets
+##### Release Assets
 
-Direct standalone executable binaries are available on the [Releases Page](https://github.com/Shra1V32/opencode/releases):
+Archive release assets are available on the [Releases Page](https://github.com/Shra1V32/opencode/releases):
 
-| Operating System | Architecture | Direct Binary Asset |
+| Operating System | Architecture | Release Asset |
 |---|---|---|
-| Linux | x86_64 / amd64 | `opencode-linux-amd64` / `opencode-linux-x64` |
-| Linux | ARM64 | `opencode-linux-arm64` |
-| Linux (musl) | x86_64 / ARM64 | `opencode-linux-amd64-musl` / `opencode-linux-arm64-musl` |
-| macOS | Apple Silicon (M1/M2/M3/M4) | `opencode-darwin-arm64` |
-| macOS | Intel | `opencode-darwin-amd64` / `opencode-darwin-x64` |
-| Windows | x86_64 / ARM64 | `opencode-windows-amd64.exe` / `opencode-windows-arm64.exe` |
+| Linux | x86_64 / amd64 | `opencode-linux-x64.tar.gz` |
+| Linux | ARM64 | `opencode-linux-arm64.tar.gz` |
+| Linux (musl) | x86_64 / ARM64 | `opencode-linux-x64-musl.tar.gz` / `opencode-linux-arm64-musl.tar.gz` |
+| macOS | Apple Silicon (M1/M2/M3/M4) | `opencode-darwin-arm64.zip` |
+| macOS | Intel | `opencode-darwin-x64.zip` |
+| Windows | x86_64 / ARM64 | `opencode-windows-x64.zip` / `opencode-windows-arm64.zip` |
 
 ##### Building from Source (Bun)
 
