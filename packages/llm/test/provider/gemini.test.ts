@@ -29,9 +29,20 @@ describe("Gemini route", () => {
       const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.body).toEqual({
-        contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
+        model: "gemini-2.5-flash",
+        store: false,
+        input: [{ role: "user", parts: [{ text: "Say hello." }] }],
         systemInstruction: { parts: [{ text: "You are concise." }] },
-        generationConfig: { maxOutputTokens: 20, temperature: 0 },
+        tools: undefined,
+        toolConfig: undefined,
+        generationConfig: {
+          maxOutputTokens: 20,
+          temperature: 0,
+          topP: undefined,
+          topK: undefined,
+          stopSequences: undefined,
+          thinkingConfig: undefined,
+        },
       })
     }),
   )
@@ -45,7 +56,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
+      expect(prepared.body.input).toEqual([
         { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
         { role: "model", parts: [{ text: "After." }] },
       ])
@@ -78,14 +89,16 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body).toEqual({
-        contents: [
+        model: "gemini-2.5-flash",
+        store: false,
+        input: [
           {
             role: "user",
             parts: [{ text: "What is in this image?" }, { inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
           },
           {
             role: "model",
-            parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+            parts: [{ functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: undefined }],
           },
           {
             role: "user",
@@ -94,6 +107,8 @@ describe("Gemini route", () => {
             ],
           },
         ],
+        systemInstruction: undefined,
+        generationConfig: undefined,
         tools: [
           {
             functionDeclarations: [
@@ -132,7 +147,7 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
+      expect(prepared.body.input).toEqual([
         { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
         {
           role: "user",
@@ -147,7 +162,7 @@ describe("Gemini route", () => {
           ],
         },
       ])
-      expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
+      expect(JSON.stringify(prepared.body.input)).not.toContain('"content":"AAECAw=="')
     }),
   )
 
@@ -169,7 +184,7 @@ describe("Gemini route", () => {
           ],
         }),
       )
-      expect(prepared.body.contents).toEqual([
+      expect(prepared.body.input).toEqual([
         { role: "user", parts: [{ inlineData: { mimeType: "image/png", data: "AAEC" } }] },
         {
           role: "user",
@@ -227,7 +242,13 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body).toEqual({
-        contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
+        model: "gemini-2.5-flash",
+        store: false,
+        input: [{ role: "user", parts: [{ text: "Say hello." }] }],
+        systemInstruction: undefined,
+        generationConfig: undefined,
+        tools: undefined,
+        toolConfig: undefined,
       })
     }),
   )
@@ -419,7 +440,7 @@ describe("Gemini route", () => {
           ],
         }),
       )
-      expect(prepared.body.contents).toEqual([
+      expect(prepared.body.input).toEqual([
         {
           role: "model",
           parts: [
@@ -579,6 +600,39 @@ describe("Gemini route", () => {
       expect(error.message).toContain(
         "Gemini assistant messages only support text, reasoning, and tool-call content for now",
       )
+    }),
+  )
+
+  it.effect("parses Interactions API delta stream fixtures", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          event: "step.delta",
+          delta: { text: "thinking", thought: true, thought_signature: "sig_1" },
+        },
+        {
+          event: "step.delta",
+          delta: { text: "Hello from Interactions API!" },
+        },
+        {
+          event: "interaction.completed",
+          finish_reason: "STOP",
+          usage_metadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
+        },
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Hello from Interactions API!")
+      expect(response.reasoning).toBe("thinking")
+      expect(response.usage).toMatchObject({
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+      })
     }),
   )
 })

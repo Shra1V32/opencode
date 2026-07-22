@@ -33,6 +33,7 @@ const GeminiTextPart = Schema.Struct({
   text: Schema.String,
   thought: Schema.optional(Schema.Boolean),
   thoughtSignature: Schema.optional(Schema.String),
+  thought_signature: Schema.optional(Schema.String),
 })
 
 const GeminiInlineDataPart = Schema.Struct({
@@ -48,6 +49,7 @@ const GeminiFunctionCallPart = Schema.Struct({
     args: Schema.Unknown,
   }),
   thoughtSignature: Schema.optional(Schema.String),
+  thought_signature: Schema.optional(Schema.String),
 })
 
 const GeminiFunctionResponsePart = Schema.Struct({
@@ -81,46 +83,77 @@ const GeminiFunctionDeclaration = Schema.Struct({
 })
 
 const GeminiTool = Schema.Struct({
-  functionDeclarations: Schema.Array(GeminiFunctionDeclaration),
+  functionDeclarations: Schema.optional(Schema.Array(GeminiFunctionDeclaration)),
+  function_declarations: Schema.optional(Schema.Array(GeminiFunctionDeclaration)),
 })
 
 const GeminiToolConfig = Schema.Struct({
-  functionCallingConfig: Schema.Struct({
-    mode: Schema.Literals(["AUTO", "NONE", "ANY"]),
-    allowedFunctionNames: optionalArray(Schema.String),
-  }),
+  functionCallingConfig: Schema.optional(
+    Schema.Struct({
+      mode: Schema.Literals(["AUTO", "NONE", "ANY"]),
+      allowedFunctionNames: optionalArray(Schema.String),
+      allowed_function_names: optionalArray(Schema.String),
+    }),
+  ),
+  function_calling_config: Schema.optional(
+    Schema.Struct({
+      mode: Schema.Literals(["AUTO", "NONE", "ANY"]),
+      allowedFunctionNames: optionalArray(Schema.String),
+      allowed_function_names: optionalArray(Schema.String),
+    }),
+  ),
 })
 
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
+  thinking_budget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
+  include_thoughts: Schema.optional(Schema.Boolean),
 })
 
 const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
+  max_output_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
+  top_p: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
+  top_k: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
+  stop_sequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
+  thinking_config: Schema.optional(GeminiThinkingConfig),
 })
 
 const GeminiBodyFields = {
-  contents: Schema.Array(GeminiContent),
+  model: Schema.optional(Schema.String),
+  store: Schema.optional(Schema.Boolean),
+  input: Schema.optional(Schema.Array(GeminiContent)),
+  contents: Schema.optional(Schema.Array(GeminiContent)),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
+  system_instruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
+  tool_config: Schema.optional(GeminiToolConfig),
   generationConfig: Schema.optional(GeminiGenerationConfig),
+  generation_config: Schema.optional(GeminiGenerationConfig),
 }
 const GeminiBody = Schema.Struct(GeminiBodyFields)
 export type GeminiBody = Schema.Schema.Type<typeof GeminiBody>
 
 const GeminiUsage = Schema.Struct({
   cachedContentTokenCount: Schema.optional(Schema.Number),
+  cached_content_token_count: Schema.optional(Schema.Number),
   thoughtsTokenCount: Schema.optional(Schema.Number),
+  thoughts_token_count: Schema.optional(Schema.Number),
   promptTokenCount: Schema.optional(Schema.Number),
+  prompt_token_count: Schema.optional(Schema.Number),
   candidatesTokenCount: Schema.optional(Schema.Number),
+  candidates_token_count: Schema.optional(Schema.Number),
   totalTokenCount: Schema.optional(Schema.Number),
+  total_tokens: Schema.optional(Schema.Number),
+  input_tokens: Schema.optional(Schema.Number),
+  output_tokens: Schema.optional(Schema.Number),
 })
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
@@ -129,9 +162,36 @@ const GeminiCandidate = Schema.Struct({
   finishReason: Schema.optional(Schema.String),
 })
 
+const GeminiDeltaPart = Schema.Struct({
+  type: Schema.optional(Schema.String),
+  text: Schema.optional(Schema.String),
+  thought: Schema.optional(Schema.Boolean),
+  thoughtSignature: Schema.optional(Schema.String),
+  thought_signature: Schema.optional(Schema.String),
+  functionCall: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      args: Schema.Unknown,
+    }),
+  ),
+  function_call: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      args: Schema.Unknown,
+    }),
+  ),
+})
+
 const GeminiEvent = Schema.Struct({
+  delta: Schema.optional(GeminiDeltaPart),
   candidates: optionalArray(GeminiCandidate),
   usageMetadata: Schema.optional(GeminiUsage),
+  usage_metadata: Schema.optional(GeminiUsage),
+  usage: Schema.optional(GeminiUsage),
+  finishReason: Schema.optional(Schema.String),
+  finish_reason: Schema.optional(Schema.String),
+  event: Schema.optional(Schema.String),
+  event_type: Schema.optional(Schema.String),
 })
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
@@ -312,8 +372,12 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     thinkingConfig: thinkingConfig(request),
   }
 
+  const messages = yield* lowerMessages(request)
+
   return {
-    contents: yield* lowerMessages(request),
+    model: request.model.id,
+    store: false,
+    input: messages,
     systemInstruction:
       request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
     tools: toolsEnabled
@@ -341,21 +405,23 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // to produce the inclusive `outputTokens` the rest of the contract expects.
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
-  const cached = usage.cachedContentTokenCount
-  const nonCached = ProviderShared.subtractTokens(usage.promptTokenCount, cached)
-  // `candidatesTokenCount` is visible-only; sum with thoughts to produce the
-  // inclusive `outputTokens` the contract expects. Only compute the total
-  // when the visible component is reported — otherwise we'd fabricate an
-  // inclusive number from a partial breakdown.
+  const promptTokenCount = usage.promptTokenCount ?? usage.prompt_token_count ?? usage.input_tokens
+  const cached = usage.cachedContentTokenCount ?? usage.cached_content_token_count
+  const nonCached = ProviderShared.subtractTokens(promptTokenCount, cached)
+  const thoughtsTokenCount = usage.thoughtsTokenCount ?? usage.thoughts_token_count
+  const candidatesTokenCount = usage.candidatesTokenCount ?? usage.candidates_token_count
+  const totalTokens = usage.totalTokenCount ?? usage.total_tokens
   const outputTokens =
-    usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined
+    candidatesTokenCount !== undefined
+      ? candidatesTokenCount + (thoughtsTokenCount ?? 0)
+      : usage.output_tokens
   return new Usage({
-    inputTokens: usage.promptTokenCount,
+    inputTokens: promptTokenCount,
     outputTokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
-    reasoningTokens: usage.thoughtsTokenCount,
-    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+    reasoningTokens: thoughtsTokenCount,
+    totalTokens: ProviderShared.totalTokens(promptTokenCount, outputTokens, totalTokens),
     providerMetadata: { google: usage },
   })
 }
@@ -397,16 +463,12 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
     : []
 
 const step = (state: ParserState, event: GeminiEvent) => {
+  const usageRaw = event.usageMetadata ?? event.usage_metadata ?? event.usage
+  const finishReasonRaw = event.finishReason ?? event.finish_reason
   const nextState = {
     ...state,
-    usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
+    usage: usageRaw ? (mapUsage(usageRaw) ?? state.usage) : state.usage,
   }
-  const candidate = event.candidates?.[0]
-  if (!candidate?.content)
-    return Effect.succeed([
-      { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },
-      [],
-    ] as const)
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
@@ -414,17 +476,90 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let nextToolCallId = nextState.nextToolCallId
   let reasoningSignature = nextState.reasoningSignature
 
+  // Handle Interactions API delta format
+  if (event.delta) {
+    const delta = event.delta
+    const signature = delta.thoughtSignature ?? delta.thought_signature ?? reasoningSignature
+    if (signature) reasoningSignature = signature
+
+    const func = delta.functionCall ?? delta.function_call
+    if (func) {
+      const input = func.args
+      const id = `tool_${nextToolCallId++}`
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        LLMEvent.toolCall({
+          id,
+          name: func.name,
+          input,
+          providerMetadata: signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
+        }),
+      )
+      hasToolCalls = true
+    }
+
+    if (delta.text && delta.text.length > 0) {
+      if (delta.thought) {
+        lifecycle = Lifecycle.reasoningDelta(
+          lifecycle,
+          events,
+          "reasoning-0",
+          delta.text,
+          signature ? googleMetadata({ thoughtSignature: signature }) : undefined,
+        )
+      } else {
+        lifecycle = Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          "reasoning-0",
+          reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+        )
+        lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.text)
+      }
+    }
+
+    return Effect.succeed([
+      {
+        ...nextState,
+        hasToolCalls,
+        lifecycle,
+        nextToolCallId,
+        reasoningSignature,
+        finishReason: finishReasonRaw ?? nextState.finishReason,
+      },
+      events,
+    ] as const)
+  }
+
+  // Handle candidates format
+  const candidate = event.candidates?.[0]
+  if (!candidate?.content)
+    return Effect.succeed([
+      { ...nextState, finishReason: finishReasonRaw ?? candidate?.finishReason ?? nextState.finishReason },
+      [],
+    ] as const)
+
   for (const part of candidate.content.parts) {
     if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
       reasoningSignature = part.thoughtSignature
-    if ("text" in part && part.text.length > 0) {
+    if ("thought_signature" in part && part.thought_signature && "thought" in part && part.thought)
+      reasoningSignature = part.thought_signature
+
+    if ("text" in part && part.text && part.text.length > 0) {
+      const sig = ("thoughtSignature" in part && part.thoughtSignature) || ("thought_signature" in part && part.thought_signature) || undefined
       if (part.thought) {
         lifecycle = Lifecycle.reasoningDelta(
           lifecycle,
           events,
           "reasoning-0",
           part.text,
-          part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
+          sig ? googleMetadata({ thoughtSignature: sig }) : undefined,
         )
         continue
       }
@@ -438,9 +573,11 @@ const step = (state: ParserState, event: GeminiEvent) => {
       continue
     }
 
-    if ("functionCall" in part) {
-      const input = part.functionCall.args
+    if ("functionCall" in part && part.functionCall) {
+      const func = part.functionCall
+      const input = func.args
       const id = `tool_${nextToolCallId++}`
+      const sig = part.thoughtSignature
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
@@ -451,11 +588,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
       events.push(
         LLMEvent.toolCall({
           id,
-          name: part.functionCall.name,
+          name: func.name,
           input,
-          providerMetadata: part.thoughtSignature
-            ? googleMetadata({ thoughtSignature: part.thoughtSignature })
-            : undefined,
+          providerMetadata: sig ? googleMetadata({ thoughtSignature: sig }) : undefined,
         }),
       )
       hasToolCalls = true
@@ -469,7 +604,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
       lifecycle,
       nextToolCallId,
       reasoningSignature,
-      finishReason: candidate.finishReason ?? nextState.finishReason,
+      finishReason: finishReasonRaw ?? candidate.finishReason ?? nextState.finishReason,
     },
     events,
   ] as const)
@@ -501,8 +636,8 @@ export const route = Route.make({
   id: ADAPTER,
   provider: "google",
   protocol,
-  // Gemini's path embeds the model id and pins SSE framing at the URL level.
-  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {
+  // Gemini Interactions API endpoint with stream=true
+  endpoint: Endpoint.path(() => `/interactions?stream=true`, {
     baseURL: DEFAULT_BASE_URL,
   }),
   auth: Auth.none,
