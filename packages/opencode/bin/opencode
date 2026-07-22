@@ -48,8 +48,12 @@ const envPath = process.env.OPENCODE_BIN_PATH
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
-//
 const cached = path.join(scriptDir, ".opencode")
+
+if (envPath || fs.existsSync(cached)) {
+  run(envPath || cached)
+  return
+}
 
 const platformMap = {
   darwin: "darwin",
@@ -130,7 +134,13 @@ const names = (() => {
   if (platform === "linux") {
     const musl = (() => {
       try {
-        if (fs.existsSync("/etc/alpine-release")) return true
+        if (
+          fs.existsSync("/etc/alpine-release") ||
+          fs.existsSync("/lib/ld-musl-x86_64.so.1") ||
+          fs.existsSync("/lib/ld-musl-aarch64.so.1")
+        ) {
+          return true
+        }
       } catch {
         // ignore
       }
