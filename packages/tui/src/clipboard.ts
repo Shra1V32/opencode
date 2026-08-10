@@ -23,7 +23,7 @@ function command(command: string, args: string[] = [], input?: string) {
 function writeOsc52(text: string) {
   if (!process.stdout.isTTY) return
   const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
-  const passthrough = `\x1bPtmux;\x1b${sequence}\x1b\\`
+  const passthrough = `\x1bPtmux;${sequence.replaceAll("\x1b", "\x1b\x1b")}\x1b\\`
   process.stdout.write(process.env.TMUX ? sequence + passthrough : process.env.STY ? passthrough : sequence)
 }
 
@@ -72,13 +72,20 @@ export async function read() {
   const { default: clipboardy } = await import("clipboardy")
   const text = await clipboardy.read().catch(() => undefined)
   if (text) return { data: text, mime: "text/plain" }
+
+  if (process.env.TMUX) {
+    const tmuxBuffer = await command("tmux", ["save-buffer", "-"]).catch(() => undefined)
+    if (tmuxBuffer?.length) return { data: tmuxBuffer.toString("utf-8"), mime: "text/plain" }
+  }
 }
 
 export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
+  tmux = Boolean(process.env.TMUX),
 ): string[] | undefined {
+  if (tmux && has("tmux")) return ["tmux", "load-buffer", "-w", "-"]
   if (os === "darwin" && has("osascript")) return ["osascript"]
   if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
@@ -99,7 +106,33 @@ let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
     const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
+    const native = copyCommand(
+      platform(),
+      Boolean(process.env.WAYLAND_DISPLAY),
+      (name) => Boolean(which(name)),
+      Boolean(process.env.TMUX),
+    )
+    if (native?.[0] === "tmux") {
+      const systemNative = copyCommand(
+        platform(),
+        Boolean(process.env.WAYLAND_DISPLAY),
+        (name) => Boolean(which(name)),
+        false,
+      )
+      return async (text: string) => {
+        await command("tmux", ["load-buffer", "-w", "-"], text)
+          .catch(() => command("tmux", ["load-buffer", "-"], text))
+          .catch(() => undefined)
+        if (systemNative?.[0] === "osascript") {
+          const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+          await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
+          return
+        }
+        if (systemNative) {
+          await command(systemNative[0], systemNative.slice(1), text).catch(() => undefined)
+        }
+      }
+    }
     if (native?.[0] === "osascript") {
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')

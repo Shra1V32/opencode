@@ -14,6 +14,20 @@ test("falls back through X11 clipboard commands", () => {
   expect(copyCommand("linux", false, (name) => name === "xsel")).toEqual(["xsel", "--clipboard", "--input"])
 })
 
+test("prefers tmux clipboard when inside tmux session", () => {
+  expect(copyCommand("linux", false, (name) => name === "tmux", true)).toEqual(["tmux", "load-buffer", "-w", "-"])
+  expect(copyCommand("darwin", false, (name) => name === "tmux" || name === "osascript", true)).toEqual([
+    "tmux",
+    "load-buffer",
+    "-w",
+    "-",
+  ])
+})
+
+test("falls back to native commands if tmux command is unavailable even inside tmux", () => {
+  expect(copyCommand("darwin", false, (name) => name === "osascript", true)).toEqual(["osascript"])
+})
+
 test("returns undefined when native clipboard is unavailable", () => {
   expect(copyCommand("linux", false, () => false)).toBeUndefined()
 })
