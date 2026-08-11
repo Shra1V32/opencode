@@ -8,7 +8,7 @@ import { recordedTests } from "../recorded-test"
 
 const model = Google.configure({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY ?? "fixture",
-}).model("gemini-2.5-flash")
+}).model("gemma-4-31b-it")
 
 // Gemini does implicit prefix caching on 2.5+ models above ~1024 tokens. The
 // `CacheHint` is currently a no-op for Gemini (the explicit `CachedContent`

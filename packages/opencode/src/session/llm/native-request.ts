@@ -45,7 +45,7 @@ const providerMetadata = (value: unknown): ProviderMetadata | undefined => {
 // Stored AI SDK parts historically kept provider-owned continuation metadata in
 // `providerOptions`; native parts now use `providerMetadata` directly.
 const partProviderMetadata = (part: Record<string, unknown>) =>
-  providerMetadata(part.providerMetadata) ?? providerMetadata(part.providerOptions)
+  providerMetadata(part.providerMetadata) ?? providerMetadata(part.metadata) ?? providerMetadata(part.providerOptions)
 
 const textPart = (part: Record<string, unknown>) => ({
   type: "text" as const,

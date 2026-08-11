@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "gemini/gemini-3-6-flash-tool-call",
+    "recordedAt": "2026-08-11T00:32:55.709Z",
+    "provider": "google",
+    "route": "gemini",
+    "transport": "http",
+    "model": "gemini-3.6-flash",
+    "tags": [
+      "prefix:gemini",
+      "provider:google",
+      "tool",
+      "tool-call",
+      "golden"
+    ]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/interactions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.6-flash\",\"input\":[{\"type\":\"user_input\",\"content\":[{\"type\":\"text\",\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"system_instruction\":\"Call tools exactly as requested.\",\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}],\"generation_config\":{\"max_output_tokens\":300,\"temperature\":0},\"stream\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: interaction.created\ndata: {\"interaction\":{\"id\":\"v1_Chd0MjE2YXRDcktMRG5uc0VQOUpfRnVBZxIXdDIxNmF0Q3JLTERubnNFUDlKX0Z1QWc\",\"status\":\"in_progress\",\"object\":\"interaction\",\"model\":\"gemini-3.6-flash\"},\"event_type\":\"interaction.created\"}\n\nevent: interaction.status_update\ndata: {\"interaction_id\":\"v1_Chd0MjE2YXRDcktMRG5uc0VQOUpfRnVBZxIXdDIxNmF0Q3JLTERubnNFUDlKX0Z1QWc\",\"status\":\"in_progress\",\"event_type\":\"interaction.status_update\"}\n\nevent: error\ndata: {\"error\":{\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\\nPlease retry in 4.303910435s.\",\"code\":\"quota_exceeded\"},\"event_type\":\"error\"}\n\n"
+      }
+    }
+  ]
+}

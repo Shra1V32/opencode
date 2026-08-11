@@ -2037,13 +2037,13 @@ describe("session.llm.stream", () => {
     },
   )
 
-  const geminiFixture = { providerID: "google", modelID: "gemini-2.5-flash" }
+  const geminiFixture = { providerID: "google", modelID: "gemini-3.1-flash-lite" }
   it.instance(
     "sends Google API payload for Gemini models",
     () =>
       Effect.gen(function* () {
         const model = loadFixture(geminiFixture.providerID, geminiFixture.modelID).model
-        const pathSuffix = `/v1beta/models/${model.id}:streamGenerateContent`
+        const pathSuffix = "/v1beta/interactions"
 
         const chunks = [
           {
@@ -2091,15 +2091,18 @@ describe("session.llm.stream", () => {
 
         const capture = yield* Effect.promise(() => request)
         const body = capture.body
-        const config = body.generationConfig as
-          | { temperature?: number; topP?: number; maxOutputTokens?: number }
+        const config = body.generation_config as
+          | { temperature?: number; top_p?: number; max_output_tokens?: number }
           | undefined
 
         expect(capture.url.pathname).toBe(pathSuffix)
-        expect(body.contents).toEqual([{ role: "user", parts: [{ text: "Hello" }] }])
+        expect(body.input).toEqual([
+          { type: "user_input", content: [{ type: "text", text: "Hello" }] },
+          { type: "thought", content: [{ type: "text", text: "" }] },
+        ])
         expect(config?.temperature).toBe(0.3)
-        expect(config?.topP).toBe(0.8)
-        expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
+        expect(config?.top_p).toBe(0.8)
+        expect(config?.max_output_tokens).toBe(ProviderTransform.maxOutputTokens(resolved))
       }),
     {
       config: () => ({

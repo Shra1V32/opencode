@@ -14,7 +14,7 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
  * - `OpenAIChat.protocol` — chat completions style
  * - `OpenAIResponses.protocol` — responses API
  * - `AnthropicMessages.protocol` — messages API with content blocks
- * - `Gemini.protocol` — generateContent
+ * - `Gemini.protocol` — Interactions API
  * - `BedrockConverse.protocol` — Converse with binary event-stream framing
  *
  * A `Protocol` is **not** a deployment. It does not know which URL, which

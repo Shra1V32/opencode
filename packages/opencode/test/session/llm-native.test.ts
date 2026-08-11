@@ -422,7 +422,17 @@ describe("session.llm-native.request", () => {
         provider: { ...providerInfo, id: ProviderV2.ID.make("google") },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "test-openai-key",
+    })
+    expect(
+      LLMNativeRuntime.status({
+        model: { ...baseModel, providerID: ProviderV2.ID.make("amazon-bedrock") },
+        provider: { ...providerInfo, id: ProviderV2.ID.make("amazon-bedrock") },
+        auth: undefined,
+      }),
+    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, google, or anthropic" })
     expect(
       LLMNativeRuntime.status({
         model: baseModel,
@@ -444,7 +454,18 @@ describe("session.llm-native.request", () => {
         provider: providerInfo,
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" })
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "test-openai-key",
+    })
+
+    expect(
+      LLMNativeRuntime.status({
+        model: { ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/cohere" } },
+        provider: providerInfo,
+        auth: undefined,
+      }),
+    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, Anthropic, or Google" })
 
     expect(
       LLMNativeRuntime.status({

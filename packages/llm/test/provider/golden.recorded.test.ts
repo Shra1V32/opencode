@@ -19,7 +19,7 @@ const anthropic = Anthropic.configure({
 const anthropicHaiku = anthropic.model("claude-haiku-4-5-20251001")
 const anthropicOpus = anthropic.model("claude-opus-4-7")
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
-const gemini = google.model("gemini-2.5-flash")
+const gemini = google.model("gemini-3.6-flash")
 const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const xaiBasic = xai.model("grok-3-mini")
 const xaiFlagship = xai.model("grok-4.3")
@@ -118,15 +118,15 @@ describeRecordedGoldenScenarios([
     ],
   },
   {
-    name: "Gemini 2.5 Flash",
+    name: "Gemini 3.6 Flash",
     prefix: "gemini",
     model: gemini,
     requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
     scenarios: [
       { id: "text", maxTokens: 80 },
-      "tool-call",
-      { id: "image", maxTokens: 160 },
-      { id: "image-tool-result", maxTokens: 40 },
+      { id: "tool-call", maxTokens: 300 },
+      { id: "image", maxTokens: 300 },
+      { id: "image-tool-result", maxTokens: 300 },
     ],
   },
   {

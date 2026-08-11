@@ -29,9 +29,11 @@ describe("Gemini route", () => {
       const prepared = yield* LLMClient.prepare(request)
 
       expect(prepared.body).toEqual({
-        contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
-        systemInstruction: { parts: [{ text: "You are concise." }] },
-        generationConfig: { maxOutputTokens: 20, temperature: 0 },
+        model: "gemini-2.5-flash",
+        input: [{ type: "user_input", content: [{ type: "text", text: "Say hello." }] }],
+        system_instruction: "You are concise.",
+        generation_config: { max_output_tokens: 20, temperature: 0 },
+        stream: true,
       })
     }),
   )
@@ -45,9 +47,15 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
-        { role: "user", parts: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
-        { role: "model", parts: [{ text: "After." }] },
+      expect(prepared.body.input).toEqual([
+        {
+          type: "user_input",
+          content: [
+            { type: "text", text: "Before." },
+            { type: "text", text: "<system-update>\nUpdate.\n</system-update>" },
+          ],
+        },
+        { type: "model_output", content: [{ type: "text", text: "After." }] },
       ])
     }),
   )
@@ -78,34 +86,37 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body).toEqual({
-        contents: [
+        model: "gemini-2.5-flash",
+        input: [
           {
-            role: "user",
-            parts: [{ text: "What is in this image?" }, { inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
-          },
-          {
-            role: "model",
-            parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
-          },
-          {
-            role: "user",
-            parts: [
-              { functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } },
+            type: "user_input",
+            content: [
+              { type: "text", text: "What is in this image?" },
+              { type: "image", mime_type: "image/png", data: "AAECAw==" },
             ],
+          },
+          {
+            type: "function_call",
+            id: "call_1",
+            name: "lookup",
+            arguments: { query: "weather" },
+          },
+          {
+            type: "function_result",
+            call_id: "call_1",
+            name: "lookup",
+            result: { forecast: "sunny" },
           },
         ],
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: "lookup",
-                description: "Lookup data",
-                parameters: { type: "object", properties: { query: { type: "string" } } },
-              },
-            ],
+            type: "function",
+            name: "lookup",
+            description: "Lookup data",
+            parameters: { type: "object", properties: { query: { type: "string" } } },
           },
         ],
-        toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
+        stream: true,
       })
     }),
   )
@@ -132,22 +143,12 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
-        {
-          role: "user",
-          parts: [
-            {
-              functionResponse: {
-                name: "read",
-                response: { name: "read", content: "Image read successfully" },
-              },
-            },
-            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
-          ],
-        },
+      expect(prepared.body.input).toEqual([
+        { type: "function_call", id: "call_image", name: "read", arguments: { path: "pixel.png" } },
+        { type: "function_result", call_id: "call_image", name: "read", result: { output: "Image read successfully" } },
+        { type: "user_input", content: [{ type: "image", mime_type: "image/png", data: "AAECAw==" }] },
       ])
-      expect(JSON.stringify(prepared.body.contents)).not.toContain('"content":"AAECAw=="')
+      expect(JSON.stringify(prepared.body.input)).not.toContain('"content":"AAECAw=="')
     }),
   )
 
@@ -169,15 +170,10 @@ describe("Gemini route", () => {
           ],
         }),
       )
-      expect(prepared.body.contents).toEqual([
-        { role: "user", parts: [{ inlineData: { mimeType: "image/png", data: "AAEC" } }] },
-        {
-          role: "user",
-          parts: [
-            { functionResponse: { name: "read", response: { name: "read", content: "" } } },
-            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
-          ],
-        },
+      expect(prepared.body.input).toEqual([
+        { type: "user_input", content: [{ type: "image", mime_type: "image/png", data: "AAEC" }] },
+        { type: "function_result", call_id: "call_image", name: "read", result: { output: "" } },
+        { type: "user_input", content: [{ type: "image", mime_type: "image/jpeg", data: "/9j/" }] },
       ])
     }),
   )
@@ -227,7 +223,9 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body).toEqual({
-        contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
+        model: "gemini-2.5-flash",
+        input: [{ type: "user_input", content: [{ type: "text", text: "Say hello." }] }],
+        stream: true,
       })
     }),
   )
@@ -260,19 +258,17 @@ describe("Gemini route", () => {
       expect(prepared.body).toMatchObject({
         tools: [
           {
-            functionDeclarations: [
-              {
-                parameters: {
-                  type: "object",
-                  required: ["status"],
-                  properties: {
-                    status: { type: "string", enum: ["1", "2"] },
-                    tags: { type: "array", items: { type: "string" } },
-                    name: { type: "string" },
-                  },
-                },
+            type: "function",
+            name: "lookup",
+            parameters: {
+              type: "object",
+              required: ["status"],
+              properties: {
+                status: { type: "string", enum: ["1", "2"] },
+                tags: { type: "array", items: { type: "string" } },
+                name: { type: "string" },
               },
-            ],
+            },
           },
         ],
       })
@@ -283,34 +279,49 @@ describe("Gemini route", () => {
     Effect.gen(function* () {
       const body = sseEvents(
         {
-          candidates: [
-            {
-              content: { role: "model", parts: [{ text: "thinking", thought: true }] },
-            },
-          ],
+          event_type: "step.start",
+          index: 0,
+          step: { type: "thought" },
         },
         {
-          candidates: [
-            {
-              content: { role: "model", parts: [{ text: "Hello" }] },
-            },
-          ],
+          event_type: "step.delta",
+          index: 0,
+          delta: { type: "thought_summary", content: { text: "thinking" } },
         },
         {
-          candidates: [
-            {
-              content: { role: "model", parts: [{ text: "!" }] },
-              finishReason: "STOP",
-            },
-          ],
+          event_type: "step.stop",
+          index: 0,
         },
         {
-          usageMetadata: {
-            promptTokenCount: 5,
-            candidatesTokenCount: 2,
-            totalTokenCount: 7,
-            thoughtsTokenCount: 1,
-            cachedContentTokenCount: 1,
+          event_type: "step.start",
+          index: 1,
+          step: { type: "model_output" },
+        },
+        {
+          event_type: "step.delta",
+          index: 1,
+          delta: { type: "text", text: "Hello" },
+        },
+        {
+          event_type: "step.delta",
+          index: 1,
+          delta: { type: "text", text: "!" },
+        },
+        {
+          event_type: "step.stop",
+          index: 1,
+        },
+        {
+          event_type: "interaction.completed",
+          interaction: {
+            status: "completed",
+            usage: {
+              total_input_tokens: 5,
+              total_output_tokens: 3,
+              total_cached_tokens: 1,
+              total_thought_tokens: 1,
+              total_tokens: 7,
+            },
           },
         },
       )
@@ -335,11 +346,11 @@ describe("Gemini route", () => {
         totalTokens: 7,
         providerMetadata: {
           google: {
-            promptTokenCount: 5,
-            candidatesTokenCount: 2,
-            totalTokenCount: 7,
-            thoughtsTokenCount: 1,
-            cachedContentTokenCount: 1,
+            total_input_tokens: 5,
+            total_output_tokens: 3,
+            total_cached_tokens: 1,
+            total_thought_tokens: 1,
+            total_tokens: 7,
           },
         },
       })
@@ -364,21 +375,45 @@ describe("Gemini route", () => {
 
   it.effect("preserves thoughtSignature for reasoning and tool-call continuation", () =>
     Effect.gen(function* () {
-      const body = sseEvents({
-        candidates: [
-          {
-            content: {
-              role: "model",
-              parts: [
-                { text: "thinking", thought: true },
-                { text: "", thought: true, thoughtSignature: "thought_sig" },
-                { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
-              ],
-            },
-            finishReason: "STOP",
-          },
-        ],
-      })
+      const body = sseEvents(
+        {
+          event_type: "step.start",
+          index: 0,
+          step: { type: "thought" },
+        },
+        {
+          event_type: "step.delta",
+          index: 0,
+          delta: { type: "thought_summary", content: { text: "thinking" } },
+        },
+        {
+          event_type: "step.delta",
+          index: 0,
+          delta: { type: "thought_signature", signature: "thought_sig" },
+        },
+        {
+          event_type: "step.stop",
+          index: 0,
+        },
+        {
+          event_type: "step.start",
+          index: 1,
+          step: { id: "tool_0", type: "function_call", name: "lookup" },
+        },
+        {
+          event_type: "step.delta",
+          index: 1,
+          delta: { type: "arguments_delta", arguments: '{"query":"weather"}' },
+        },
+        {
+          event_type: "step.stop",
+          index: 1,
+        },
+        {
+          event_type: "interaction.completed",
+          interaction: { status: "requires_action" },
+        },
+      )
       const response = yield* LLMClient.generate(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -398,7 +433,7 @@ describe("Gemini route", () => {
         id: "reasoning-0",
         providerMetadata: { google: { thoughtSignature: "thought_sig" } },
       })
-      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "tool_sig" } } })
+      expect(toolCall).toMatchObject({ providerMetadata: { google: { thoughtSignature: "thought_sig" } } })
       expect(response.events.findIndex((event) => event.type === "reasoning-end")).toBeLessThan(
         response.events.findIndex((event) => event.type === "tool-call"),
       )
@@ -419,32 +454,38 @@ describe("Gemini route", () => {
           ],
         }),
       )
-      expect(prepared.body.contents).toEqual([
-        {
-          role: "model",
-          parts: [
-            { text: "thinking", thought: true, thoughtSignature: "thought_sig" },
-            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
-          ],
-        },
+      expect(prepared.body.input).toEqual([
+        { type: "thought", summary: [{ type: "text", text: "thinking" }], signature: "thought_sig" },
+        { type: "function_call", id: "tool_0", name: "lookup", arguments: { query: "weather" } },
       ])
     }),
   )
 
   it.effect("emits streamed tool calls and maps finish reason", () =>
     Effect.gen(function* () {
-      const body = sseEvents({
-        candidates: [
-          {
-            content: {
-              role: "model",
-              parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
-            },
-            finishReason: "STOP",
+      const body = sseEvents(
+        {
+          event_type: "step.start",
+          index: 0,
+          step: { id: "tool_0", type: "function_call", name: "lookup" },
+        },
+        {
+          event_type: "step.delta",
+          index: 0,
+          delta: { type: "arguments_delta", arguments: '{"query":"weather"}' },
+        },
+        {
+          event_type: "step.stop",
+          index: 0,
+        },
+        {
+          event_type: "interaction.completed",
+          interaction: {
+            status: "requires_action",
+            usage: { total_input_tokens: 5, total_output_tokens: 1 },
           },
-        ],
-        usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
-      })
+        },
+      )
       const response = yield* LLMClient.generate(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -457,7 +498,7 @@ describe("Gemini route", () => {
         cacheReadInputTokens: undefined,
         reasoningTokens: undefined,
         totalTokens: 6,
-        providerMetadata: { google: { promptTokenCount: 5, candidatesTokenCount: 1 } },
+        providerMetadata: { google: { total_input_tokens: 5, total_output_tokens: 1 } },
       })
 
       expect(response.toolCalls).toEqual([
@@ -492,20 +533,40 @@ describe("Gemini route", () => {
 
   it.effect("assigns unique ids to multiple streamed tool calls", () =>
     Effect.gen(function* () {
-      const body = sseEvents({
-        candidates: [
-          {
-            content: {
-              role: "model",
-              parts: [
-                { functionCall: { name: "lookup", args: { query: "weather" } } },
-                { functionCall: { name: "lookup", args: { query: "news" } } },
-              ],
-            },
-            finishReason: "STOP",
-          },
-        ],
-      })
+      const body = sseEvents(
+        {
+          event_type: "step.start",
+          index: 0,
+          step: { id: "tool_0", type: "function_call", name: "lookup" },
+        },
+        {
+          event_type: "step.delta",
+          index: 0,
+          delta: { type: "arguments_delta", arguments: '{"query":"weather"}' },
+        },
+        {
+          event_type: "step.stop",
+          index: 0,
+        },
+        {
+          event_type: "step.start",
+          index: 1,
+          step: { id: "tool_1", type: "function_call", name: "lookup" },
+        },
+        {
+          event_type: "step.delta",
+          index: 1,
+          delta: { type: "arguments_delta", arguments: '{"query":"news"}' },
+        },
+        {
+          event_type: "step.stop",
+          index: 1,
+        },
+        {
+          event_type: "interaction.completed",
+          interaction: { status: "requires_action" },
+        },
+      )
       const response = yield* LLMClient.generate(
         LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
@@ -525,27 +586,36 @@ describe("Gemini route", () => {
       const length = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
-            sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "MAX_TOKENS" }] }),
+            sseEvents({ event_type: "interaction.completed", interaction: { status: "incomplete" } }),
           ),
         ),
       )
       const filtered = yield* LLMClient.generate(request).pipe(
         Effect.provide(
-          fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] })),
+          fixedResponse(
+            sseEvents({ event_type: "interaction.completed", interaction: { status: "failed" } }),
+          ),
         ),
       )
 
       expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
       expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
       expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "error" })
     }),
   )
 
   it.effect("leaves total usage undefined when component counts are missing", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))),
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              event_type: "interaction.completed",
+              interaction: { status: "completed", usage: { total_thought_tokens: 1 } },
+            }),
+          ),
+        ),
       )
 
       expect(response.usage).toMatchObject({ reasoningTokens: 1 })

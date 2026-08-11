@@ -17,21 +17,19 @@ import { ProviderHelper } from "./provider"
 */
 
 type Usage = {
-  promptTokenCount?: number
-  candidatesTokenCount?: number
-  totalTokenCount?: number
-  cachedContentTokenCount?: number
-  promptTokensDetails?: { modality: string; tokenCount: number }[]
-  cacheTokensDetails?: { modality: string; tokenCount: number }[]
-  thoughtsTokenCount?: number
+  total_input_tokens?: number
+  total_output_tokens?: number
+  total_cached_tokens?: number
+  total_thought_tokens?: number
+  total_tokens?: number
 }
 
-export const googleHelper: ProviderHelper = ({ providerModel }) => ({
+export const googleHelper: ProviderHelper = ({ providerModel: _providerModel }) => ({
   format: "google",
-  modifyUrl: (providerApi: string, isStream?: boolean) =>
-    `${providerApi}/models/${providerModel}:${isStream ? "streamGenerateContent?alt=sse" : "generateContent"}`,
+  modifyUrl: (providerApi: string, _isStream?: boolean) => `${providerApi}/interactions`,
   modifyHeaders: (headers: Headers, apiKey: string, _stickyId: string) => {
     headers.set("x-goog-api-key", apiKey)
+    headers.set("api-revision", "2026-05-20")
   },
   modifyBody: (body: Record<string, any>) => {
     return body
@@ -46,26 +44,26 @@ export const googleHelper: ProviderHelper = ({ providerModel }) => ({
 
         let json
         try {
-          json = JSON.parse(chunk.slice(6)) as { usageMetadata?: Usage }
+          json = JSON.parse(chunk.slice(6)) as { interaction?: { usage?: Usage }; event_type?: string }
         } catch {
           return
         }
 
-        if (!json.usageMetadata) return
-        usage = json.usageMetadata
+        if (!json.interaction?.usage) return
+        usage = json.interaction.usage
       },
       retrieve: () => usage,
     }
   },
-  extractUsage: (response: any) => response.usageMetadata,
+  extractUsage: (response: any) => response.interaction?.usage ?? response.usageMetadata,
   normalizeUsage: (usage: Usage) => {
-    const inputTokens = usage.promptTokenCount ?? 0
-    const outputTokens = usage.candidatesTokenCount ?? 0
-    const reasoningTokens = usage.thoughtsTokenCount ?? 0
-    const cacheReadTokens = usage.cachedContentTokenCount ?? 0
+    const inputTokens = usage.total_input_tokens ?? 0
+    const outputTokens = usage.total_output_tokens ?? 0
+    const reasoningTokens = usage.total_thought_tokens ?? 0
+    const cacheReadTokens = usage.total_cached_tokens ?? 0
     return {
       inputTokens: inputTokens - cacheReadTokens,
-      outputTokens: outputTokens + reasoningTokens,
+      outputTokens,
       reasoningTokens,
       cacheReadTokens,
       cacheWrite5mTokens: undefined,
